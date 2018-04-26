@@ -1,0 +1,351 @@
+---
+title: "Plating with R 7"
+output: html_notebook
+author: Rajarshi Choudhury
+---
+
+
+
+
+####1: Build an R Notebook of the concrete strength example.
+
+Development of model for estimating performance of building materials with ANNs.
+
+
+We will first load the data:
+
+```{r}
+concrete <- read.csv("concrete.csv")
+str(concrete)
+```
+
+ We see that the concrete dataset contains 1,030 examples of concrete with eight features describing the components used in the mixture. We also see the structure of the dataset here.
+ 
+We know Neural networks work best when the input data are scaled to a narrow range around zero. Since we will be making the normalized value near to 0, we will use min-max normalisation.
+
+```{r}
+normalize <- function(x) { #developing min-max normalization function
+return((x - min(x)) / (max(x) - min(x)))
+}
+```
+
+Now we will use lapply() function to apply the normalize function to every column in the concrete data fram as such:
+
+```{r}
+concrete_norm <- as.data.frame(lapply(concrete, normalize)) #using lapply to normalize every column
+```
+
+To confirm that all the values have been normalised:
+
+```{r}
+summary(concrete_norm$strength)
+```
+
+We see that all values have been normalised between 0 and 1, as compared to previous:
+
+```{r}
+summary(concrete$strength)
+```
+
+We will separate our data into 75% training set and 25% testing set.
+
+```{r}
+concrete_train <- concrete_norm[1:773, ]
+concrete_test <- concrete_norm[774:1030, ]
+```
+
+We will use multilayer feed forward neural network, and use neuralnet package for the same.We'll begin by training the simplest multilayer feedforward network with only a single hidden node:
+
+```{r}
+library(neuralnet)
+concrete_model <- neuralnet(strength ~ cement + slag + ash + water + superplastic + coarseagg + fineagg + age, data = concrete_train) #training the model
+```
+
+We can view the network topology as such:
+
+```{r}
+plot(concrete_model) #plot of concrete_model training
+```
+
+We get the error and steps of calculation.
+
+Lets evaluate our model:
+
+```{r}
+#evaluating model
+model_results <- compute(concrete_model, concrete_test[1:8])
+predicted_strength <- model_results$net.result
+```
+
+We will need to use corelation matrixas it is a prediction problem rather than classification.
+
+```{r}
+cor(predicted_strength, concrete_test$strength)
+```
+
+Let's see what happens when we increase the number of hidden nodes to five. We use the neuralnet() function as before, but add the hidden = 5 parameter:
+
+```{r}
+concrete_model2 <- neuralnet(strength ~ cement + slag + ash + water + superplastic + coarseagg + fineagg + age, data = concrete_train, hidden = 5)
+```
+
+Plotting the network again, we see a drastic increase in the number of connections.
+
+We can see how this impacted the performance as follows:
+
+```{r}
+plot(concrete_model2)
+```
+
+We see decrease in reported error as well as increase in training steps.Applying the same steps to compare the predicted values to the true values, we now obtain a correlation as:
+
+```{r}
+model_results2 <- compute(concrete_model2, concrete_test[1:8])
+predicted_strength2 <- model_results2$net.result
+cor(predicted_strength2, concrete_test$strength) #finding corelation for the new model.
+```
+
+We see corelation has increased from previous model.
+
+
+
+#####2: Building an R Notebook of the optical character recognition example.
+
+Development of Optical Character Recognition using SVM:
+
+Reading the data into R:
+
+```{r}
+letters <- read.csv("letterdata.csv")
+str(letters)
+```
+
+According to the documentation provided by Frey and Slate, when the glyphs are scanned into the computer, they are converted into pixels and 16 statistical attributes are recorded.
+
+The attributes measure such characteristics as the horizontal and vertical dimensions of the glyph, the proportion of black (versus white) pixels, and the average horizontal and vertical position of the pixels. Presumably, differences in the concentration of black pixels across various areas of the box should provide a way to differentiate among the 26 lette rs of the alphabet.
+
+We know SVM learners require each dataset to be numeric, which is already in this dataset. However we do need to normalize and standardize the data. However, the r package will automaticaaly rescale the value, so there is no requirement for manual intervention.
+
+Lets divide the dataset into training and testing set:
+
+```{r}
+letters_train <- letters[1:16000, ]
+letters_test <- letters[16001:20000, ]
+```
+
+We will be using the kernlab package to build our model.
+
+```{r}
+library(kernlab)
+letter_classifier <- ksvm(letter ~ ., data = letters_train, kernel = "vanilladot") #building our model using kernlab
+letter_classifier
+```
+
+We will use predict() function to evaluate our model evacuation.
+
+```{r}
+letter_predictions <- predict(letter_classifier, letters_test) # evaluating model performance
+head(letter_predictions)
+```
+
+
+To examine how well our classifier performed, we need to compare the predicted letter to the true letter in the testing dataset using the table() function for this purpose (only a portion of the full table is shown here):
+
+```{r}
+table(letter_predictions, letters_test$letter) #table to show corrected predictions
+```
+
+The following command returns a vector of TRUE or FALSE values, indicatingwhether the model's predicted letter agrees with (that is, matches) the actual letter in the test dataset:
+
+```{r}
+agreement <- letter_predictions == letters_test$letter
+```
+
+Using the table() function, we see that the classifier correctly identified the letter in
+3,357 out of the 4,000 test records:
+
+```{r}
+table(agreement) #table to find agreement
+```
+
+In percentage terms, the accuracy is about 84 percent:
+```{r}
+prop.table(table(agreement)) #finding %age of accuracy
+```
+
+
+Improving model performance:
+
+We can map the data into a higher dimensional space to obtain a better model fit in kernel function. To choose among many different kernel functions, a popular convention is to begin with the Gaussian RBF kernel, which has been shown to perform well for many types of data. The RBF-based SVM can be trained using the ksvm() function as shown here:
+
+```{r}
+letter_classifier_rbf <- ksvm(letter ~ ., data = letters_train, kernel = "rbfdot")
+```
+
+Next, we make predictions as done earlier:
+
+```{r}
+letter_predictions_rbf <- predict(letter_classifier_rbf, letters_test)
+```
+
+
+Finally, we'll compare the accuracy to our linear SVM:
+
+```{r}
+agreement_rbf <- letter_predictions_rbf == letters_test$letter
+table(agreement_rbf)
+```
+
+```{r}
+prop.table(table(agreement_rbf))
+```
+
+We see an increase in accuracy jump by simply changing kernel function. Other kernel functions or variation of width of decision boundary can also be used.
+
+
+####3:Building an R Notebook of the grocery store transactions.
+
+Identifying frequently purchased groceries with association rules:
+
+We will perform a market basket analysis of transactional data from a grocery store. Our market basket analysis will utilize the purchase data collected from one month of operation at a real-world grocery store. Lets view the data:
+
+```{r}
+library(arules)
+groceries <- read.transactions("groceries.csv", sep = ",")
+summary(groceries)
+```
+
+
+The output 9835 rows refers to the number of transactions, and the output 169 columns refers to the 169 different items that might appear in someone's grocery basket. 1in a cell refers to the item being purchased, 0 otherwise. The proportion of non-zero  matrix cells is given by density value. Since there are (9,835)(169) = 1,662,115 positions in the matrix, we can calculate that a total of (1,662,115)(0.02609146) = 43,367 items were purchased during the store's 30 days of operation.
+
+The next summary() block output lists the items that were most commonly found in the transactional data. As 2,513 / 9,835 = 0.2555, we can determine that whole milk appeared in 25.6 percent of the transactions.
+
+Finally, we see a total of 2,159 transactions contained only a single item, while one transaction had 32 items. The first quartile and median purchase sizes are 2 and 3 items respectively, implying that 25 % of the transactions contained 2 or fewer items and the transactions were split in half between those with less than three items and those with more.
+
+
+To view the first 5 transactions using inspect() function from arules package:
+
+```{r}
+inspect(groceries[1:5])
+```
+
+itemFrequency() function along with row-column matrix notion allows us to see the proportion of transactions that contain the item. Lets see for the first 3 data:
+
+```{r}
+itemFrequency(groceries[, 1:3])
+```
+
+If required to plot these items to appear in a minimum proportion of transactions, we use itemFrequencyPlot() with the support parameter:
+
+```{r}
+itemFrequencyPlot(groceries, support = 0.1)
+```
+
+Tpo limit the number of items, say 20, we write:
+```{r}
+itemFrequencyPlot(groceries, topN = 20)
+```
+
+
+To visualize the entire sparse matrix, we use the image() function as followa:
+
+```{r}
+image(groceries[1:5])
+```
+
+
+The resulting diagram depicts a matrix with 5 rows and 169 columns, indicating 5 transactions and 169 possible items . Cells in the matrix are filled withblack for transactions (rows) where the item (column) was purchased.
+
+To view the sparse matrix for a randomly sampled set of transactions:
+
+```{r}
+image(sample(groceries, 100)) #This creates a matrix diagram with 100 rows and 169 columns:
+```
+
+
+We will now train the data using the apriori() function. Although running the apriori() function is straightforward, there can sometimes be a fair amount of trial and error needed to find the support and confidence parameters that produce a reasonable number of association rules.
+
+In this case, if we attempt to use the default settings of support = 0.1 and confidence = 0.8, we will end up with a set of zero rules:
+
+```{r}
+apriori(groceries)
+```
+
+Obviously, we need to widen the search a bit. 
+
+One approach the problem of setting a minimum support threshold is find/think the minimum number of transactions you would need before one would consider a pattern interesting. For example, one could argue that if an item is purchased twice a day , it might be an interesting pattern. 
+
+It is now possible to calculate the support level needed to find only the rules matching at least that many transactions. As 60 out of 9,835 equals 0.006, we'll try setting the support there first.
+
+We'll start with a confidence threshold of 0.25, which basically means the rule has to be correct at least 25 percent of the time to be considered. This eliminates the most unreliable rules, while allowing some room behavior modifications with targeted promotions.
+
+In addition to the minimum support and confidence parameters, it is helpful to set minlen = 2 to eliminate rules that contain fewer than two items. This prevents uninteresting rules from being created. 
+
+The full command to find a set of association rules using the Apriori algorithm is as follows:
+
+```{r}
+groceryrules <- apriori(groceries, parameter = list(support = 0.006, confidence = 0.25, minlen = 2))
+groceryrules
+```
+
+Our groceryrules object contains a set of 463 association rules.
+
+Lets see the summary of grocery rules
+
+```{r}
+summary(groceryrules)
+```
+
+First we see the distribution. Then we see the summary statistics of the rule quality measures: support, confidence, and lift.
+The lift of a rule measures how much more likely one item or itemset is purchased relative to its typical rate of purch.ase, given that you know another item or itemset has been purchased; and is given in the third section.
+
+In the final section mining information is shown telling us about how the rules were chosen. Here, we see that the groceries data, which contained 9,835 transactions, was used to construct rules with a minimum support of 0.0006 and minimum confidence of 0.25.
+
+We can take a look at specific rules using the inspect() function. For instance, the first three rules in the groceryrules object can be viewed as follows:
+
+```{r}
+inspect(groceryrules[1:3])
+```
+
+The first rule can be read as, "if a customer buys potted plants, they will also buy whole milk." With support of 0.007 and confidence of 0.400, we can determine that this rule covers 0.7 percent of the transactions and is correct in 40 percent of purchases involving potted plants. 
+
+The lift value tells us how much more is a customer likely to buy whole milk relative to the average customer, given that he or she bought a potted plant. Since we know that about 25.6 percent of the customers bought whole milk (support), while 40 percent of the customers buying a potted plant bought whole milk (confidence), we can compute the lift value as 0.40 / 0.256 = 1.56, which matches the value shown.
+
+Depending upon the objectives of the market basket analysis, the most useful rules might be the ones with the highest support, confidence, or lift. The arules package includes a sort() function that can be used to reorder the list of rules so that the ones with the highest or lowest values of the quality measure come first.
+
+To reorder the groceryrules object, we can apply sort() while specifying a "support", "confidence", or "lift" value to the by parameter. By combining the sort function with vector operators, we can obtain a specific number of interesting rules. For instance, the best five rules according to the lift statistic can be examined as follows:
+
+```{r}
+inspect(sort(groceryrules, by = "lift")[1:5])
+```
+
+
+The subset() function provides a method to search for subsets of transactions, items, or rules. To use it to find any rules with berries appearing in the rule, use the following command. It will store the rules in a new object titled berryrules:
+
+```{r}
+berryrules <- subset(groceryrules, items %in% "berries")
+inspect(berryrules)
+```
+
+To share the results of your market basket analysis, we will write() function. This will produce a CSV file that can be used in most spreadsheet programs including Microsoft Excel:
+
+```{r}
+write(groceryrules, file = "groceryrules.csv", sep = ",", quote = TRUE, row.names = FALSE)
+```
+
+
+Sometimes it is also convenient to convert the rules into an R data frame. This can beaccomplished easily using the as() function, as follows:
+
+```{r}
+groceryrules_df <- as(groceryrules, "data.frame")
+```
+
+This creates a data frame with the rules in the factor format, and numeric vectors for support, confidence, and lift. Lets see its structure:
+
+```{r}
+str(groceryrules_df)
+```
+
+
+Sources:
+Data Mining with R - Second Edition
